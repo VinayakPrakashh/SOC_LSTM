@@ -1,179 +1,102 @@
 module tiling_top #(
-    parameter TILE_SIZE=4,
-    parameter MAX_SIZE=512,
-    parameter DATA_WIDTH=32,
-)(  input clk,rst,wr_en,
-    input [DATA_WIDTH-1:0] data_in,
-    output reg [7:0] counter
+    parameter DATA_WIDTH = 12,
+    parameter TILE_SIZE  = 16
+)(
+    input  wire                   clk,
+    input  wire                   rst,
+    input  wire [DATA_WIDTH-1:0]  data_in,
+    output wire [DATA_WIDTH-1:0]  data_out
 );
-wire [DATA_WIDTH-1:0] data_to_tile;
-global_bram main_bram(.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .wr_en(wr_en),
-                      .counter(counter)
-                      );
-tiled_bram ip_bram_1 (.clk(clk),.
-                      .data_in(data_in),
-                     .wr_en(),
-                     .data_out(data_out)
-                     );
-tiled_bram ip_bram_2 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out)
-                      .wr_en());
-tiled_bram ip_bram_3 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_4 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_5 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_6 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_7 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_8 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_9 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_10 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_11 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_12 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_13 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_14 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_15 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram ip_bram_16 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_1 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_2 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_3 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_4 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_5 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_6 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_7 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_8 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_9 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_10 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_11 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_12 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_13 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());    
-tiled_bram weight_bram_14 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());                      
-tiled_bram weight_bram_15 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());
-tiled_bram weight_bram_16 (.clk(clk),
-                      .rst(rst),
-                      .data_in(data_in),
-                      .data_out(data_out),
-                      .wr_en());                      
-                      
+reg wr_en_1,wr_en_2;
+reg [DATA_WIDTH-1:0] counter;
+reg [1:0] state,next_state;
+    tiled_bram_buffer #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .TILE_SIZE(TILE_SIZE)
+    ) bram_inst (
+        .clk(clk),
+        .rst(rst),
+        .wr_en(wr_en_1),
+        .data_in(data_in),
+        .data_out(data_out)
+    );
 
-
+    tiled_bram_buffer #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .TILE_SIZE(TILE_SIZE)
+    ) bram_inst2 (
+        .clk(clk),
+        .rst(rst),   
+        .wr_en(wr_en_2),
+        .data_in(data_in),
+        .data_out(data_out) // Not used in this example
+    );
+parameter IDLE=2'd0,INITIAL_LOAD=2'd1,OVERLAP1=2'd2,OVERLAP2=2'd3;
+always @(*)begin
+    case(state)
+        IDLE:begin
+            next_state=INITIAL_LOAD;
+        end
+        INITIAL_LOAD:begin
+           if(counter==15)
+             next_state=OVERLAP1;
+           else
+            next_state=INITIAL_LOAD;
+        end
+        OVERLAP1:begin
+           if(counter==15)
+             next_state=OVERLAP2;
+           else
+            next_state=OVERLAP1;
+        end
+        OVERLAP2:begin
+            if(counter==15)
+             next_state=OVERLAP1;
+           else
+            next_state=OVERLAP2;
+        end
+        default:next_state=IDLE;
+    endcase
+end 
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        state <= IDLE;
+        counter <= 0;
+    if(counter==15)
+        counter <=0;
+    end else begin
+        state <= next_state;
+        counter <=counter+1;
+    end 
+end
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        wr_en_1 <=1'b0;
+        wr_en_2 <=1'b0;
+    end else begin
+        case(next_state)
+            IDLE:begin
+                wr_en_1 <=1'b0;
+                wr_en_2 <=1'b0;
+            end
+            INITIAL_LOAD:begin
+                wr_en_1 <=1'b1;
+                wr_en_2 <=1'b0;
+            end
+            OVERLAP2:begin
+                wr_en_1 <=1'b1;
+                wr_en_2 <=1'b0;
+               
+            end
+            OVERLAP1:begin
+              wr_en_1 <=1'b0;
+              wr_en_2 <=1'b1;
+            end
+            default:begin
+                wr_en_1 <=1'b0;
+                wr_en_2 <=1'b0;
+            end
+        endcase
+    end
+end
 endmodule
