@@ -12,7 +12,7 @@ module top_16_by_1 #(
     output wire [OUTPUT_WIDTH-1:0] pe1,pe2,pe3,pe4,pe5,pe6,pe7,pe8,pe9,pe10,pe11,pe12,pe13,pe14,pe15,pe16,// processing element outputs
     output wire fifo_full,
     output wire fifo_empty
-);
+
 
 wire [DATA_WIDTH-1:0]pe1_reg,pe2_reg,pe3_reg,pe4_reg,pe5_reg,pe6_reg,pe7_reg,pe8_reg,pe9_reg,pe10_reg,pe11_reg,pe12_reg,pe13_reg,pe14_reg,pe15_reg,pe16_reg;
 wire [DATA_WIDTH-1:0] ip_data_11; //only one row of data input 
@@ -23,33 +23,48 @@ wire [DATA_WIDTH-1:0] data_1,data_2,data_3,data_4,data_5,data_6,data_7,data_8,da
 // ...existing code...
 
 // FIXED: Enhanced control logic to handle 1-cycle pipeline delay
+// ALTERNATIVE: More explicit state machine approach
 reg reading;
 reg output_valid;
-reg [4:0] read_count;  // Count how many values have been read (0-15)
+reg [4:0] read_count;     // Count how many values have been read (0-15)
+reg [2:0] valid_extend_count;  // Count additional valid cycles (0-3)
 
 always @(posedge clk or posedge rst) begin
     if (rst) begin
         reading <= 0;
         output_valid <= 0;
         read_count <= 0;
+        valid_extend_count <= 0;
     end
-    else if (fifo_full && !reading) begin
-        reading <= 1;           // Start reading when FIFO becomes full
-        output_valid <= 0;      // Output not valid yet (1 cycle delay)
-        read_count <= 0;        // Reset counter
+    else if (fifo_full && !reading && !output_valid) begin
+        // Start new read cycle
+        reading <= 1;
+        output_valid <= 0;
+        read_count <= 0;
+        valid_extend_count <= 0;
     end
     else if (reading) begin
+        // Reading phase
         output_valid <= 1;      // Output becomes valid after 1 cycle
         if (read_count < 16) begin
-            read_count <= read_count + 1;  // Count each read
+            read_count <= read_count + 1;
         end else begin
-            reading <= 0;       // Stop reading after 16 values (0-15)
-            read_count <= 0;    // Reset counter
+            // Finished reading, start extension
+            reading <= 0;
+            output_valid <= 1;  // Keep valid
+            read_count <= 0;
+            valid_extend_count <= 1;  // Start counting extension cycles
         end
     end
     else if (output_valid && !reading) begin
-        // Continue showing outputs for 1 more cycle after reading stops
-        output_valid <= 0;
+        // Extension phase - keep output_valid high for 3 more cycles
+        if (valid_extend_count < 3) begin
+            valid_extend_count <= valid_extend_count + 1;
+        end else begin
+            // End of extension
+            output_valid <= 0;
+            valid_extend_count <= 0;
+        end
     end
 end
 
