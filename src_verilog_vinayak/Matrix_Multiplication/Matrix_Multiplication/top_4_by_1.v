@@ -100,5 +100,6 @@ processing_element #(
         .output_reg(pe14),  
         .forwarded_data_out(), // No further forwarding
         .forwarded_weight_out()
-);                                                      
+);    
+                                                  
 endmodule 
