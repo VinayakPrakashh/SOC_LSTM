@@ -7,6 +7,7 @@ module top_16_by_1 #(
     input wire clk,
     input wire rst,
     input wire wr_en,
+    input wire wr_en_data,
     input wire [DATA_WIDTH-1:0] data_r1, // row data rows of the matrix 
     input wire [DATA_WIDTH-1:0] weight_c1,weight_c2,weight_c3,weight_c4 ,weight_c5,weight_c6,weight_c7,weight_c8,weight_c9,weight_c10,weight_c11,weight_c12,weight_c13,weight_c14,weight_c15,weight_c16,// column of the matrix 
     output wire [OUTPUT_WIDTH-1:0] pe1,pe2,pe3,pe4,pe5,pe6,pe7,pe8,pe9,pe10,pe11,pe12,pe13,pe14,pe15,pe16,// processing element outputs
@@ -99,7 +100,7 @@ assign pe16 = (reading || output_valid) ? pe16_reg : {OUTPUT_WIDTH{1'b0}};
 // CRITICAL FIX: Only weight_fifo_16 drives fifo_full and fifo_empty to avoid signal conflicts
 sync_fifo #(.DATA_WIDTH(DATA_WIDTH), .DEPTH(FIFO_DEPTH)) data_fifo_1 (
     .clk(clk), .rst(rst),
-    .wr_en(wr_en), .rd_en(pe1_ready),
+    .wr_en(wr_en_data), .rd_en(pe1_ready),
     .data_in(data_r1), .data_out(ip_data_11),
     .full(),.empty()  // DISCONNECTED to avoid signal conflict
 );

@@ -7,7 +7,7 @@ module global_bram #(
     input  wire                   wr_en,
     input  wire [DATA_WIDTH-1:0]  data_in,
     output reg  [DATA_WIDTH-1:0]  data_out,
-    output reg [7:0] counter,
+    output reg [7:0] counter
 );
     reg [DATA_WIDTH-1:0] global_mem [0:MAX_INPUT_SIZE];
 
@@ -20,7 +20,7 @@ module global_bram #(
                  global_mem[counter]<= data_in;
                 counter <= counter + 1;
             end
-            data_out <= local_tile_mem[counter];
+            data_out <= global_mem[counter];
         end
     end
 
