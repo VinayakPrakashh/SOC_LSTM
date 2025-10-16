@@ -14,7 +14,7 @@ module top_16_by_1 #(
     output wire fifo_full,
     output wire fifo_empty
 
-
+);
 wire [DATA_WIDTH-1:0]pe1_reg,pe2_reg,pe3_reg,pe4_reg,pe5_reg,pe6_reg,pe7_reg,pe8_reg,pe9_reg,pe10_reg,pe11_reg,pe12_reg,pe13_reg,pe14_reg,pe15_reg,pe16_reg;
 wire [DATA_WIDTH-1:0] ip_data_11; //only one row of data input 
 wire [DATA_WIDTH-1:0] weight_data_1,weight_data_2,weight_data_3,weight_data_4,weight_data_5,weight_data_6,weight_data_7,weight_data_8,weight_data_9,weight_data_10,weight_data_11,weight_data_12,weight_data_13,weight_data_14,weight_data_15,weight_data_16; //weights from fifo to processing elements 
@@ -59,7 +59,7 @@ always @(posedge clk or posedge rst) begin
     end
     else if (output_valid && !reading) begin
         // Extension phase - keep output_valid high for 3 more cycles
-        if (valid_extend_count < 3) begin
+        if (valid_extend_count < 4) begin
             valid_extend_count <= valid_extend_count + 1;
         end else begin
             // End of extension
