@@ -1,5 +1,5 @@
 module activate #(
-    parameter DATA_WIDTH = 12,
+    parameter DATA_WIDTH = 16,      // Changed from 12 to 16 for S7.8
     parameter ADDRESS_BITS = 2
 ) (
     input clk,
@@ -37,29 +37,52 @@ localparam DONE = 3'b011;
 
 reg [2:0] state, next_state;
 reg [1:0] counter;
+
 // Activation function outputs
 wire [DATA_WIDTH-1:0] sigmoid_out_i, sigmoid_out_f, sigmoid_out_o;
 wire [DATA_WIDTH-1:0] tanh_out_c;
+wire overflow_i, overflow_f, overflow_o; // Overflow flags (can be monitored if needed)
 
-// Instantiate activation functions
-sigmoid #(.WIDTH(DATA_WIDTH), .FRAC_BITS(6)) sig_i (
-    .in(in_data_i),
-    .out(sigmoid_out_i)
+// Instantiate S7.8 sigmoid activation functions
+sigmoid_s7_8 #(
+    .WIDTH(DATA_WIDTH), 
+    .FRAC_BITS(8),
+    .ADDR_WIDTH(11)
+) sig_i (
+    .input_value(in_data_i),
+    .sigmoid_out(sigmoid_out_i),
+    .overflow(overflow_i)
 );
 
-sigmoid #(.WIDTH(DATA_WIDTH), .FRAC_BITS(6)) sig_f (
-    .in(in_data_f),
-    .out(sigmoid_out_f)
+sigmoid_s7_8 #(
+    .WIDTH(DATA_WIDTH), 
+    .FRAC_BITS(8),
+    .ADDR_WIDTH(11)
+) sig_f (
+    .input_value(in_data_f),
+    .sigmoid_out(sigmoid_out_f),
+    .overflow(overflow_f)
 );
 
-sigmoid #(.WIDTH(DATA_WIDTH), .FRAC_BITS(6)) sig_o (
-    .in(in_data_o),
-    .out(sigmoid_out_o)
+sigmoid_s7_8 #(
+    .WIDTH(DATA_WIDTH), 
+    .FRAC_BITS(8),
+    .ADDR_WIDTH(11)
+) sig_o (
+    .input_value(in_data_o),
+    .sigmoid_out(sigmoid_out_o),
+    .overflow(overflow_o)
 );
 
-tanh_calc #(.WIDTH(DATA_WIDTH), .FRAC_BITS(6)) tanh_c (
-    .in(in_data_c),
-    .out(tanh_out_c)
+// Instantiate S7.8 tanh activation function
+tanh #(
+    .INPUT_WIDTH(DATA_WIDTH),
+    .OUTPUT_WIDTH(DATA_WIDTH),
+    .ADDR_WIDTH(9),
+    .FRAC_BITS(8)
+) tanh_c (
+    .input_value(in_data_c),
+    .tanh_out(tanh_out_c)
 );
 
 // State transitions
@@ -138,17 +161,16 @@ always @(posedge clk or posedge rst) begin
             end
         
             ACTIVATE: begin
-                
-                // Data is now valid from BRAM, apply activations
-                out_data_i <= sigmoid_out_i;
-                out_data_f <= sigmoid_out_f;
-                out_data_c <= tanh_out_c;
-                out_data_o <= sigmoid_out_o;
+                // Data is now valid from BRAM, apply S7.8 activations
+                out_data_i <= sigmoid_out_i;  // Sigmoid for input gate
+                out_data_f <= sigmoid_out_f;  // Sigmoid for forget gate
+                out_data_c <= tanh_out_c;     // Tanh for candidate gate
+                out_data_o <= sigmoid_out_o;  // Sigmoid for output gate
 
                 if(counter > 0) begin
                    address <= address + 1;
                 end 
-we_i <= 1; we_f <= 1; we_c <= 1; we_o <= 1; // Enable write
+                we_i <= 1; we_f <= 1; we_c <= 1; we_o <= 1; // Enable write
             end
             
             DONE: begin
