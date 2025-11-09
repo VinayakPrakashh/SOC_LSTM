@@ -29,7 +29,7 @@ assign signed_input = input_value;
 assign input_negative = signed_input[INPUT_WIDTH-1];
 
 // Get absolute value of input
-assign abs_input = input_negative ? (~input_value + 1'b1) : input_value;
+assign abs_input = input_negative ? ({1'b0,input_value[INPUT_WIDTH-2:0]}) : input_value;
 
 // Check if absolute input exceeds maximum LUT range
 assign saturate_high = (abs_input > SIGMOID_INPUT_MAX);

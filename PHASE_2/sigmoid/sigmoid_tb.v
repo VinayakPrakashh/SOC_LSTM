@@ -17,7 +17,7 @@ module tb_sigmoid_simple;
         $display("---------- | ---------- | ----------- | ----------- | --------");
         
         // Test key values
-        test_input = 16'h0000; #10; // 0.0
+        test_input = 16'h801F; #10; // 0.0
         $display("   %h    |   %6.3f   |    %h    |   %7.4f   |    %b", 
                  test_input, $signed(test_input)/256.0, sigmoid_result, 
                  $signed(sigmoid_result)/256.0, overflow);
