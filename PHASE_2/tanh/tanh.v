@@ -1,84 +1,129 @@
-module tanh #(
-    parameter INPUT_WIDTH = 16,
-    parameter OUTPUT_WIDTH = 16,
-    parameter ADDR_WIDTH = 9,
-    parameter FRAC_BITS = 8
-) (
-    input  [INPUT_WIDTH-1:0] input_value,    // S7.8 input value
-    output [OUTPUT_WIDTH-1:0] tanh_out       // S7.8 output value
+// S7.8 Fixed-point tanh approximator with LUT and comparator
+// S7.8 Format: 1 sign bit + 7 integer bits + 8 fractional bits
+// Sign bit = MSB (bit 15), if 1 = negative, if 0 = positive
+
+module tanh_approx (
+    input [15:0] x,
+    output reg [15:0] y
 );
 
-    // Internal signals
-    wire [INPUT_WIDTH-1:0] abs_input;
-    wire input_negative;
-    wire [ADDR_WIDTH-1:0] lut_addr;
-    wire addr_valid, use_symmetry, saturate_low, saturate_high;
-    wire [OUTPUT_WIDTH-1:0] lut_output;
-    wire [OUTPUT_WIDTH-1:0] positive_result;
+    wire sign_bit = x[15];           // Extract sign bit directly (1=negative, 0=positive)
+    wire [14:0] magnitude = x[14:0]; // Extract magnitude (15 bits)
     
-    // Comparison signals
-    wire abs_lt_025, abs_lte_3, abs_gt_3;
-    wire dummy_gt, dummy_eq, dummy_gte; // Unused outputs
+    // Convert magnitude back to 16-bit for comparisons
+    wire [15:0] x_abs = {1'b0, magnitude};
+    
+    wire [7:0] lut_addr;
+    wire addr_valid;
+    wire [15:0] lut_output;
+    reg [15:0] y_abs;
+    
+    // Comparison wires for regions
+    wire x_less_025;      // x < 0.25
+    wire x_gte_025;       // x >= 0.25
+    wire x_lte_30;        // x <= 3.0
+    wire x_gt_30;         // x > 3.0
     
     // Constants in S7.8 format
-    localparam [INPUT_WIDTH-1:0] THRESHOLD_025 = 16'h0040; // 0.25 * 256 = 64
-    localparam [INPUT_WIDTH-1:0] THRESHOLD_3   = 16'h0300; // 3.0 * 256 = 768
-    localparam [OUTPUT_WIDTH-1:0] TANH_ONE     = 16'b0000000100000000; // 1.0 in S7.8 ≈ 255/256
-
-    // Extract sign and absolute value
-    assign input_negative = input_value[INPUT_WIDTH-1];
-    assign abs_input = input_negative ? ({1'b0,input_value[OUTPUT_WIDTH-2:0]}) : input_value;
-
-    // Fixed-point comparator for abs_input < 0.25
+    localparam [15:0] MIN_LUT = 16'h0040;  // 0.25
+    localparam [15:0] MAX_LUT = 16'h0300;  // 3.0
+    
+    // Comparator instance for x < 0.25
     fixed_point_comparator #(
-        .WIDTH(INPUT_WIDTH),
-        .FRAC_BITS(FRAC_BITS)
-    ) comp_025 (
-        .a(abs_input),
-        .b(THRESHOLD_025),
-        .a_gt_b(dummy_gt),
-        .a_lt_b(abs_lt_025),
-        .a_eq_b(dummy_eq),
-        .a_gte_b(dummy_gte),
+        .WIDTH(16),
+        .FRAC_BITS(8)
+    ) cmp_min (
+        .a(x_abs),
+        .b(MIN_LUT),
+        .a_gt_b(),
+        .a_lt_b(x_less_025),
+        .a_eq_b(),
+        .a_gte_b(),
         .a_lte_b()
     );
-
-    // Fixed-point comparator for abs_input <= 3.0
+    
+    // Comparator instance for x >= 0.25
     fixed_point_comparator #(
-        .WIDTH(INPUT_WIDTH),
-        .FRAC_BITS(FRAC_BITS)
-    ) comp_3 (
-        .a(abs_input),
-        .b(THRESHOLD_3),
-        .a_gt_b(abs_gt_3),
+        .WIDTH(16),
+        .FRAC_BITS(8)
+    ) cmp_min_gte (
+        .a(x_abs),
+        .b(MIN_LUT),
+        .a_gt_b(),
         .a_lt_b(),
-        .a_eq_b(dummy_eq),
-        .a_gte_b(dummy_gte),
-        .a_lte_b(abs_lte_3)
+        .a_eq_b(),
+        .a_gte_b(x_gte_025),
+        .a_lte_b()
     );
-
-    // Instantiate your address calculator
-    tanh_addr_calculator_no_mult addr_calc (
-        .input_value(abs_input),
-        .lut_addr(lut_addr),
-        .addr_valid(addr_valid),
-        .use_symmetry(use_symmetry),
-        .saturate_low(saturate_low),
-        .saturate_high(saturate_high)
+    
+    // Comparator instance for x <= 3.0
+    fixed_point_comparator #(
+        .WIDTH(16),
+        .FRAC_BITS(8)
+    ) cmp_max_lte (
+        .a(x_abs),
+        .b(MAX_LUT),
+        .a_gt_b(),
+        .a_lt_b(),
+        .a_eq_b(),
+        .a_gte_b(),
+        .a_lte_b(x_lte_30)
     );
-
-    // Instantiate your LUT
-    tanh_lut_s7_8 lut (
+    
+    // Comparator instance for x > 3.0
+    fixed_point_comparator #(
+        .WIDTH(16),
+        .FRAC_BITS(8)
+    ) cmp_max_gt (
+        .a(x_abs),
+        .b(MAX_LUT),
+        .a_gt_b(x_gt_30),
+        .a_lt_b(),
+        .a_eq_b(),
+        .a_gte_b(),
+        .a_lte_b()
+    );
+    
+    // Instantiate address calculator
+    tanh_addr_calc addr_calc (
+        .x_abs(x_abs),
         .addr(lut_addr),
-        .tanh_out(lut_output)
+        .valid(addr_valid)
     );
-
-    // Piecewise tanh calculation for positive values using comparator results
-    assign positive_result = abs_lt_025 ? abs_input :           // Case: 0 ≤ x < 0.25 → f(x) = x
-                             abs_lte_3 ? lut_output :           // Case: 0.25 ≤ x ≤ 3 → tanh_table(x)
-                             TANH_ONE;                          // Case: x > 3 → f(x) = 1
-
-    // Apply sign for final output
-    assign tanh_out = input_negative ? ({1'b1,positive_result[OUTPUT_WIDTH-2:0]}) : positive_result;
+    
+    // Instantiate LUT
+    tanh_lut_data lut (
+        .addr(lut_addr),
+        .data(lut_output)
+    );
+    
+    // Select output based on input region using comparator results
+    always @(*) begin
+        if (x_less_025) begin
+            // Linear region: tanh(x) ≈ x (x < 0.25)
+            y_abs = x_abs;
+        end
+        else if (x_gte_025 && x_lte_30) begin
+            // LUT region: 0.25 <= x <= 3.0
+            y_abs = lut_output;
+        end
+        else if (x_gt_30) begin 
+            // Saturation: tanh(x) ≈ 1.0 (x > 3.0)
+            y_abs = 16'h0100;  // 1.0 in S7.8
+        end
+        else begin
+            // Default (shouldn't reach here)
+            y_abs = 16'h0000;
+        end
+    end
+    
+    // Apply sign to output
+    // S7.8 sign format: bit[15]=1 means negative
+    always @(*) begin
+        if (sign_bit)
+            y = {1'b1, y_abs[14:0]};  // Set sign bit to 1 (negative)
+        else
+            y = {1'b0, y_abs[14:0]};  // Set sign bit to 0 (positive)
+    end
 
 endmodule

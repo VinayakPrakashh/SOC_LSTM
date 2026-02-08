@@ -141,20 +141,21 @@ def build_loaders(df: pd.DataFrame, sequence_length: int, batch_size: int, devic
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Test SoC LSTM model (extracted from notebook)")
+    parser = argparse.ArgumentParser(description="Test SoC LSTM model with 1 layer")
     parser.add_argument("--model_path", default="../modeling_and_evaluation/soc_lstm_model.pth", help="Path to saved model .pth file")
     parser.add_argument("--data_dir", default=os.path.join("..", "dataset", "LG_HG2_processed"), help="Processed dataset directory")
     parser.add_argument("--temps", nargs="*", default=DEFAULT_TEMPS, help="Temperature folders to include")
     parser.add_argument("--seq_len", type=int, default=20, help="Sequence length")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
-    parser.add_argument("--hidden_size", type=int, default=94, help="Hidden size used at training")
-    parser.add_argument("--num_layers", type=int, default=4, help="Number of LSTM layers used at training")
+    parser.add_argument("--hidden_size", type=int, default=94, help="Hidden size")
+    parser.add_argument("--num_layers", type=int, default=1, help="Number of LSTM layers (CHANGED TO 1)")
     parser.add_argument("--cpu", action="store_true", help="Force CPU even if CUDA is available")
     parser.add_argument("--no_plots", action="store_true", help="Disable plots")
     args = parser.parse_args()
 
     device = torch.device("cpu" if args.cpu or not torch.cuda.is_available() else "cuda:0")
     print(f"Using device: {device}")
+    print(f"LSTM Configuration: {args.num_layers} layer(s), hidden_size={args.hidden_size}")
 
     # Load data
     print(f"Loading data from: {args.data_dir} (temps: {args.temps})")
@@ -177,11 +178,21 @@ def main():
 
     checkpoint = torch.load(args.model_path, map_location=device)
     state_dict = checkpoint.get('model_state_dict', checkpoint)
-    model.load_state_dict(state_dict)
+    
+    # Try to load weights (will fail if layer mismatch)
+    try:
+        model.load_state_dict(state_dict)
+        print("✓ Successfully loaded pretrained weights")
+    except RuntimeError as e:
+        print(f"⚠ Warning: Could not load pretrained weights (layer mismatch expected)")
+        print(f"   Error: {e}")
+        print("   Model will be randomly initialized")
+
     model.eval()
 
     # Evaluate
     preds, labels, mse, mae = evaluate_model(model, test_loader, device)
+    print(f"\nResults with {args.num_layers} LSTM layer(s):")
     print(f"Mean Squared Error on Test Set: {mse:.6f}")
     print(f"Mean Absolute Error on Test Set: {mae:.6f}")
 
@@ -195,7 +206,7 @@ def main():
         plt.xlim([0, 1])
         plt.ylim([0, 1])
         plt.plot([0, 1], [0, 1], color='red')
-        plt.title('Predicted SOC vs True SOC (Test Set)')
+        plt.title(f'Predicted SOC vs True SOC ({args.num_layers} LSTM Layer)')
         plt.tight_layout()
         plt.show()
 

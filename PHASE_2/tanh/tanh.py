@@ -13,5 +13,5 @@ def tanh(x: float) -> float:
 
 if __name__ == "__main__":
     # quick check
-    for v in [2.996]:
+    for v in [0.2657]:
         print(v, tanh(v))

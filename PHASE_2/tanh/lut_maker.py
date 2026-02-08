@@ -1,191 +1,290 @@
-import math
+import numpy as np
 
-def float_to_s7_8(value):
-    """Convert float to S7.8 format (16-bit signed fixed-point)"""
-    # Clamp value to S7.8 range: [-128, 127.99609375]
-    value = max(-128.0, min(127.99609375, value))
-    
-    # Scale by 256 and round
-    scaled = round(value * 256)
-    
-    # Convert to 16-bit signed representation
-    if scaled < 0:
-        scaled = (1 << 16) + scaled  # Two's complement
-    
-    return scaled & 0xFFFF
+# Configuration
+LUT_MIN = 0.25
+LUT_MAX = 3.0
+LUT_SIZE = 176
+OUTPUT_FILE = "tanh_lut.mem"
 
-def generate_tanh_verilog_file():
-    """Generate complete Verilog file with tanh LUT"""
+def generate_mem_file():
+    """Generate binary .mem file for Verilog $readmemb"""
     
-    input_min = 0.25
-    input_max = 3.0
-    step_size = 0.01
+    print("="*70)
+    print("Tanh LUT Memory File Generator (Binary Format)")
+    print("="*70)
+    print(f"Range: [{LUT_MIN}, {LUT_MAX}]")
+    print(f"Entries: {LUT_SIZE}")
+    print(f"Format: 1 sign bit + 7 integer bits + 8 fractional bits")
+    print(f"Output: {OUTPUT_FILE}")
+    print("="*70 + "\n")
     
-    # Calculate number of entries
-    num_entries = int((input_max - input_min) / step_size) + 1
-    addr_width = math.ceil(math.log2(num_entries))
+    lut_data = []
+    max_error = 0.0
+    total_error = 0.0
     
-    # Create output file with UTF-8 encoding
-    output_file = "tanh_lut_generated.v"
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        # Write header
-        f.write("// Tanh LUT for S7.8 Fixed-Point Format\n")
-        f.write("// Generated automatically - DO NOT EDIT MANUALLY\n")
-        f.write(f"// Input range: [{input_min}, {input_max}]\n")
-        f.write(f"// Step size: {step_size}\n")
-        f.write(f"// Number of entries: {num_entries}\n")
-        f.write(f"// Address width: {addr_width} bits\n")
-        f.write("// Data format: S7.8 (16-bit signed, 8 fractional bits)\n\n")
+    with open(OUTPUT_FILE, 'w') as f:
+        # Optional: Write header as comment
+        f.write("// Tanh LUT Memory Initialization File (Binary Format)\n")
+        f.write(f"// {LUT_SIZE} entries for range [{LUT_MIN}, {LUT_MAX}]\n")
+        f.write("// Format: S7.8 (1 sign + 7 integer + 8 fractional bits)\n")
+        f.write("// Usage: $readmemb(\"tanh_lut.mem\", memory_array);\n")
+        f.write("//\n")
+        f.write("// Address : Binary Value (16 bits)\n")
+        f.write("// -------   ---------------------------------\n")
         
-        # Write module declaration
-        f.write("module tanh_lut_s7_8 #(\n")
-        f.write("    parameter WIDTH = 16,\n")
-        f.write(f"    parameter ADDR_WIDTH = {addr_width},\n")
-        f.write(f"    parameter LUT_SIZE = {num_entries}\n")
-        f.write(") (\n")
-        f.write("    input  [ADDR_WIDTH-1:0] addr,\n")
-        f.write("    output [WIDTH-1:0] tanh_out\n")
+        for i in range(LUT_SIZE):
+            # Calculate input x value
+            x = LUT_MIN + i * (LUT_MAX - LUT_MIN) / (LUT_SIZE - 1)
+            
+            # Calculate tanh(x)
+            tanh_val = np.tanh(x)
+            
+            # Convert to S7.8 fixed-point
+            tanh_s7p8 = int(round(tanh_val * 256))
+            tanh_s7p8 = np.clip(tanh_s7p8, 0, 32767)
+            
+            # Extract components
+            sign_bit = 0
+            int_part = (tanh_s7p8 >> 8) & 0x7F
+            frac_part = tanh_s7p8 & 0xFF
+            
+            # Create 16-bit binary string
+            binary_16bit = f"{sign_bit:01b}{int_part:07b}{frac_part:08b}"
+            
+            # Verify
+            recovered_val = tanh_s7p8 / 256.0
+            error = abs(tanh_val - recovered_val)
+            max_error = max(max_error, error)
+            total_error += error
+            
+            # Store data for verification
+            lut_data.append({
+                'index': i,
+                'x': x,
+                'tanh_real': tanh_val,
+                'tanh_s7p8': tanh_s7p8,
+                'binary': binary_16bit,
+                'error': error
+            })
+            
+            # Write binary value (one per line)
+            f.write(f"{binary_16bit}  // @{i:03d}: tanh({x:.4f}) = {tanh_val:.6f} = 0x{tanh_s7p8:04X}\n")
+    
+    avg_error = total_error / LUT_SIZE
+    
+    print(f"✓ Memory file generated: {OUTPUT_FILE}")
+    print(f"\nStatistics:")
+    print(f"  Total entries: {LUT_SIZE}")
+    print(f"  Max error: {max_error:.8f}")
+    print(f"  Avg error: {avg_error:.8f}")
+    print(f"  File size: {LUT_SIZE} lines × 16 bits\n")
+    
+    return lut_data, max_error, avg_error
+
+def generate_hex_mem_file(lut_data):
+    """Also generate hex format .mem file"""
+    
+    hex_file = "tanh_lut_hex.mem"
+    
+    with open(hex_file, 'w') as f:
+        f.write("// Tanh LUT Memory Initialization File (Hexadecimal Format)\n")
+        f.write(f"// {LUT_SIZE} entries for range [{LUT_MIN}, {LUT_MAX}]\n")
+        f.write("// Format: S7.8 (1 sign + 7 integer + 8 fractional bits)\n")
+        f.write("// Usage: $readmemh(\"tanh_lut_hex.mem\", memory_array);\n")
+        f.write("//\n")
+        
+        for entry in lut_data:
+            hex_val = entry['tanh_s7p8']
+            f.write(f"{hex_val:04X}  // @{entry['index']:03d}: tanh({entry['x']:.4f}) = {entry['tanh_real']:.6f}\n")
+    
+    print(f"✓ Hex memory file generated: {hex_file}\n")
+
+def generate_coe_file(lut_data):
+    """Generate Xilinx COE file format"""
+    
+    coe_file = "tanh_lut.coe"
+    
+    with open(coe_file, 'w') as f:
+        f.write("; Tanh LUT Coefficient File for Xilinx Block Memory\n")
+        f.write(f"; {LUT_SIZE} entries for range [{LUT_MIN}, {LUT_MAX}]\n")
+        f.write("; Format: S7.8 (1 sign + 7 integer + 8 fractional bits)\n")
+        f.write("memory_initialization_radix=2;\n")
+        f.write("memory_initialization_vector=\n")
+        
+        for i, entry in enumerate(lut_data):
+            separator = "," if i < len(lut_data) - 1 else ";"
+            f.write(f"{entry['binary']}{separator}  % @{i:03d}: tanh({entry['x']:.4f}) = {entry['tanh_real']:.6f} %\n")
+    
+    print(f"✓ COE file generated: {coe_file}\n")
+
+def generate_verilog_rom(lut_data):
+    """Generate Verilog ROM module using memory file"""
+    
+    rom_file = "tanh_lut_rom.v"
+    
+    with open(rom_file, 'w') as f:
+        f.write("// filepath: tanh_lut_rom.v\n")
+        f.write("// ROM-based LUT for tanh approximation using memory initialization\n")
+        f.write("// S7.8 Format: 1 sign bit + 7 integer bits + 8 fractional bits\n\n")
+        
+        f.write("module tanh_lut_rom (\n")
+        f.write("    input [7:0] addr,\n")
+        f.write("    output [15:0] data\n")
         f.write(");\n\n")
         
-        # Write LUT array declaration
-        f.write("    // LUT data array\n")
-        f.write("    reg [WIDTH-1:0] tanh_lut [0:LUT_SIZE-1];\n\n")
+        f.write(f"    // ROM storage for {LUT_SIZE} entries\n")
+        f.write(f"    reg [15:0] rom [0:{LUT_SIZE-1}];\n\n")
         
-        # Write initialization block
-        f.write("    // Initialize LUT with tanh values\n")
+        f.write("    // Initialize ROM from memory file\n")
         f.write("    initial begin\n")
-        
-        # Generate LUT data
-        for i in range(num_entries):
-            input_val = input_min + i * step_size
-            tanh_val = math.tanh(input_val)
-            s7_8_val = float_to_s7_8(tanh_val)
-            
-            if i % 4 == 0:
-                f.write(f"        tanh_lut[{i:4d}] = 16'h{s7_8_val:04X}; ")
-            else:
-                f.write(f"tanh_lut[{i:4d}] = 16'h{s7_8_val:04X}; ")
-            
-            if (i + 1) % 4 == 0:
-                start_range = input_min + (i - 3) * step_size
-                end_range = input_val
-                f.write(f"// {start_range:.2f} to {end_range:.2f}\n")
-            elif i == num_entries - 1:
-                # Handle last line if not divisible by 4
-                remaining = (i % 4) + 1
-                start_idx = i - (remaining - 1)
-                start_range = input_min + start_idx * step_size
-                f.write(f"// {start_range:.2f} to {input_val:.2f}\n")
-        
+        f.write("        $readmemb(\"tanh_lut.mem\", rom);\n")
         f.write("    end\n\n")
         
-        # Write output assignment
-        f.write("    // Output assignment with bounds checking\n")
-        f.write("    assign tanh_out = (addr < LUT_SIZE) ? tanh_lut[addr] : tanh_lut[LUT_SIZE-1];\n\n")
-        
-        f.write("endmodule\n\n")
-        
-        # Write address calculator module
-        f.write("// Address calculator for tanh LUT\n")
-        f.write("module tanh_addr_calculator #(\n")
-        f.write("    parameter INPUT_WIDTH = 16,\n")
-        f.write(f"    parameter ADDR_WIDTH = {addr_width},\n")
-        f.write("    parameter FRAC_BITS = 8\n")
-        f.write(") (\n")
-        f.write("    input  [INPUT_WIDTH-1:0] input_value,    // S7.8 input value\n")
-        f.write("    output [ADDR_WIDTH-1:0]  lut_addr,       // Address for LUT\n")
-        f.write("    output                   addr_valid,      // Address is within valid range\n")
-        f.write("    output                   use_symmetry,    // Use tanh symmetry for negative inputs\n")
-        f.write("    output                   saturate_low,    // Input below minimum range\n")
-        f.write("    output                   saturate_high    // Input above maximum range\n")
-        f.write(");\n\n")
-        
-        # Write address calculator logic
-        input_min_hex = float_to_s7_8(input_min)
-        input_max_hex = float_to_s7_8(input_max)
-        step_size_hex = float_to_s7_8(step_size)
-        
-        f.write("    // LUT parameters\n")
-        f.write(f"    localparam [INPUT_WIDTH-1:0] INPUT_MIN = 16'h{input_min_hex:04X};  // {input_min} in S7.8\n")
-        f.write(f"    localparam [INPUT_WIDTH-1:0] INPUT_MAX = 16'h{input_max_hex:04X};  // {input_max} in S7.8\n")
-        f.write(f"    localparam [INPUT_WIDTH-1:0] STEP_SIZE = 16'h{step_size_hex:04X};  // {step_size} in S7.8\n")
-        f.write(f"    localparam MAX_ADDR = {num_entries-1};\n\n")
-        
-        f.write("    wire signed [INPUT_WIDTH-1:0] signed_input;\n")
-        f.write("    wire [INPUT_WIDTH-1:0] abs_input;\n")
-        f.write("    wire input_negative;\n")
-        f.write("    wire [INPUT_WIDTH-1:0] offset_input;\n")
-        f.write("    wire [INPUT_WIDTH+7:0] scaled_addr_wide;\n")
-        f.write("    wire [ADDR_WIDTH-1:0] scaled_addr;\n\n")
-        
-        f.write("    // Input processing\n")
-        f.write("    assign signed_input = input_value;\n")
-        f.write("    assign input_negative = signed_input[INPUT_WIDTH-1];\n")
-        f.write("    assign abs_input = input_negative ? (~input_value + 1'b1) : input_value;\n\n")
-        
-        f.write("    // Check saturation conditions\n")
-        f.write("    assign saturate_low = (abs_input < INPUT_MIN);\n")
-        f.write("    assign saturate_high = (abs_input > INPUT_MAX);\n\n")
-        
-        f.write("    // Calculate address: (abs_input - INPUT_MIN) / STEP_SIZE\n")
-        f.write("    assign offset_input = abs_input - INPUT_MIN;\n")
-        f.write("    \n")
-        f.write("    // Division by step size (approximation for 0.01)\n")
-        f.write("    // Multiply by 100 to approximate division by 0.01\n")  # Fixed the Unicode issue
-        f.write("    assign scaled_addr_wide = offset_input * 100;\n")
-        f.write("    assign scaled_addr = scaled_addr_wide[15:8];\n\n")
-        
-        f.write("    // Generate final address with bounds checking\n")
-        f.write("    assign lut_addr = saturate_low ? 0 :\n")
-        f.write("                      saturate_high ? MAX_ADDR :\n")
-        f.write("                      (scaled_addr > MAX_ADDR) ? MAX_ADDR :\n")
-        f.write("                      scaled_addr;\n\n")
-        
-        f.write("    // Control signals\n")
-        f.write("    assign addr_valid = ~saturate_low && ~saturate_high;\n")
-        f.write("    assign use_symmetry = input_negative;\n\n")
+        f.write("    // Output data\n")
+        f.write("    assign data = (addr < 8'd" + str(LUT_SIZE) + ") ? rom[addr] : 16'h0000;\n\n")
         
         f.write("endmodule\n")
     
-    print(f"Tanh LUT Verilog file generated: {output_file}")
-    print(f"Total entries: {num_entries}")
-    print(f"Address width: {addr_width} bits")
-    print(f"Memory usage: {num_entries * 2} bytes")
+    print(f"✓ Verilog ROM module generated: {rom_file}\n")
 
-def generate_verification_file():
-    """Generate verification data for testbench"""
+def verify_mem_file():
+    """Verify the generated .mem file"""
     
-    verification_file = "tanh_verification_data.txt"
+    print("="*70)
+    print("VERIFICATION: Reading back generated .mem file")
+    print("="*70 + "\n")
     
-    with open(verification_file, 'w', encoding='utf-8') as f:  # Added UTF-8 encoding
-        f.write("# Tanh Verification Data\n")
-        f.write("# Format: Input_Decimal Input_Hex Tanh_Decimal Tanh_Hex\n")
-        
-        test_values = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
-        
-        for val in test_values:
-            tanh_val = math.tanh(val)
-            input_hex = float_to_s7_8(val)
-            tanh_hex = float_to_s7_8(tanh_val)
-            f.write(f"{val:.2f} 0x{input_hex:04X} {tanh_val:.6f} 0x{tanh_hex:04X}\n")
+    with open(OUTPUT_FILE, 'r') as f:
+        lines = f.readlines()
     
-    print(f"Verification data generated: {verification_file}")
+    # Filter out comment lines
+    data_lines = [line for line in lines if line.strip() and not line.strip().startswith('//')]
+    
+    print(f"Total data lines read: {len(data_lines)}")
+    
+    # Verify first few entries
+    print("\nFirst 5 entries:")
+    for i, line in enumerate(data_lines[:5]):
+        binary_val = line.split()[0]
+        decimal_val = int(binary_val, 2)
+        float_val = decimal_val / 256.0
+        print(f"  Line {i:3d}: {binary_val} = 0x{decimal_val:04X} = {float_val:.6f}")
+    
+    # Verify specific entry (index 21)
+    print(f"\nCritical entry verification (index 21):")
+    line_21 = data_lines[21]
+    binary_val = line_21.split()[0]
+    decimal_val = int(binary_val, 2)
+    float_val = decimal_val / 256.0
+    expected_tanh = np.tanh(0.58)
+    error = abs(float_val - expected_tanh)
+    
+    print(f"  Binary:   {binary_val}")
+    print(f"  Decimal:  {decimal_val}")
+    print(f"  Hex:      0x{decimal_val:04X}")
+    print(f"  Float:    {float_val:.6f}")
+    print(f"  Expected: {expected_tanh:.6f}")
+    print(f"  Error:    {error:.8f}")
+    
+    if error < 0.002:
+        print(f"  ✓ PASS\n")
+    else:
+        print(f"  ✗ FAIL\n")
 
-def print_sample_values():
-    """Print sample tanh values for verification"""
-    print("\n=== Sample Tanh Values (S7.8 Format) ===")
-    print("Input\tTanh\tS7.8\tHex")
-    print("-" * 40)
+def generate_testbench():
+    """Generate testbench that uses the ROM module"""
     
-    test_values = [0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+    tb_file = "tb_tanh_lut_rom.v"
     
-    for val in test_values:
-        tanh_val = math.tanh(val)
-        s7_8_val = float_to_s7_8(tanh_val)
-        print(f"{val:.2f}\t{tanh_val:.4f}\t{s7_8_val}\t0x{s7_8_val:04X}")
+    with open(tb_file, 'w') as f:
+        f.write("// filepath: tb_tanh_lut_rom.v\n")
+        f.write("// Testbench for ROM-based tanh LUT\n\n")
+        f.write("`timescale 1ns/1ps\n\n")
+        
+        f.write("module tb_tanh_lut_rom;\n\n")
+        f.write("    reg [7:0] addr;\n")
+        f.write("    wire [15:0] data;\n")
+        f.write("    real data_real;\n\n")
+        
+        f.write("    // Instantiate ROM\n")
+        f.write("    tanh_lut_rom dut (\n")
+        f.write("        .addr(addr),\n")
+        f.write("        .data(data)\n")
+        f.write("    );\n\n")
+        
+        f.write("    // Convert to real\n")
+        f.write("    always @(*) begin\n")
+        f.write("        data_real = data / 256.0;\n")
+        f.write("    end\n\n")
+        
+        f.write("    // Test\n")
+        f.write("    initial begin\n")
+        f.write("        $display(\"Testing ROM-based Tanh LUT\");\n")
+        f.write("        $display(\"=\"*50);\n\n")
+        
+        f.write("        // Test first 10 entries\n")
+        f.write("        for (addr = 0; addr < 10; addr = addr + 1) begin\n")
+        f.write("            #10;\n")
+        f.write("            $display(\"Addr=%3d: Data=0x%04X (%7.4f)\", addr, data, data_real);\n")
+        f.write("        end\n\n")
+        
+        f.write("        // Test critical point (index 21)\n")
+        f.write("        addr = 21;\n")
+        f.write("        #10;\n")
+        f.write("        $display(\"\\nCritical addr=21: Data=0x%04X (%7.4f)\", data, data_real);\n\n")
+        
+        f.write("        // Test last entry\n")
+        f.write("        addr = 175;\n")
+        f.write("        #10;\n")
+        f.write("        $display(\"Last addr=175: Data=0x%04X (%7.4f)\", data, data_real);\n\n")
+        
+        f.write("        #100;\n")
+        f.write("        $finish;\n")
+        f.write("    end\n\n")
+        
+        f.write("endmodule\n")
+    
+    print(f"✓ Testbench generated: {tb_file}\n")
+
+def main():
+    """Main function"""
+    
+    print("\n" + "="*70)
+    print("TANH LUT MEMORY FILE GENERATOR")
+    print("="*70 + "\n")
+    
+    # Generate binary .mem file
+    lut_data, max_error, avg_error = generate_mem_file()
+    
+    # Generate hex format
+    generate_hex_mem_file(lut_data)
+    
+    # Generate COE file for Xilinx
+    generate_coe_file(lut_data)
+    
+    # Generate Verilog ROM module
+    generate_verilog_rom(lut_data)
+    
+    # Generate testbench
+    generate_testbench()
+    
+    # Verify
+    verify_mem_file()
+    
+    # Summary
+    print("="*70)
+    print("GENERATION COMPLETE")
+    print("="*70)
+    print("\nGenerated files:")
+    print("  1. tanh_lut.mem         - Binary format memory file")
+    print("  2. tanh_lut_hex.mem     - Hexadecimal format memory file")
+    print("  3. tanh_lut.coe         - Xilinx COE format")
+    print("  4. tanh_lut_rom.v       - Verilog ROM module")
+    print("  5. tb_tanh_lut_rom.v    - Testbench for ROM module")
+    print("\nUsage in Verilog:")
+    print("  $readmemb(\"tanh_lut.mem\", memory_array);")
+    print("  $readmemh(\"tanh_lut_hex.mem\", memory_array);")
+    print("="*70 + "\n")
 
 if __name__ == "__main__":
-    generate_tanh_verilog_file()
-    generate_verification_file()
-    print_sample_values()
+    main()
