@@ -1,0 +1,34 @@
+================================================================================
+ LSTM CONCATENATED WEIGHT MATRIX STRUCTURE
+================================================================================
+
+Model Configuration:
+  Hidden size (N): 94
+  Input size (I):  5
+  Number of gates: 4
+  4N (total rows): 376
+  K = I + N:       99
+
+================================================================================
+ CONCATENATED MATRIX: W_all (376 × 99)
+================================================================================
+
+W_all = [W_ih | W_hh]
+      = [(376×5) | (376×94)]
+      = (376 × 99)
+
+Column Structure:
+  Columns [0:5]:    Process input x_t (5 features)
+  Columns [5:99]:   Process hidden state h_prev (94 units)
+
+Row Structure (Gates):
+  Rows [0:94]:      Input gate  (i)
+  Rows [94:188]:    Forget gate (f)
+  Rows [188:282]:   Cell gate   (g)
+  Rows [282:376]:   Output gate (o)
+
+================================================================================
+ USAGE IN LSTM FORWARD PASS
+================================================================================
+
+1. Concatenate inputs:
