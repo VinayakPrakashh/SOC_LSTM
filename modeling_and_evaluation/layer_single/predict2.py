@@ -10,13 +10,32 @@ FEATURE_COLS = ['Voltage [V]', 'Current [A]', 'Temperature [degC]', 'Power [W]',
 DEFAULT_TEMPS = ['25degC', '0degC', 'n10degC', 'n20degC', '10degC', '40degC']
 
 
+class LinearScratch(nn.Module):
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(out_features, in_features))
+        self.bias = nn.Parameter(torch.empty(out_features)) if bias else None
+        # simple init (like Kaiming uniform)
+        nn.init.kaiming_uniform_(self.weight, a=np.sqrt(5))
+        if self.bias is not None:
+            fan_in = in_features
+            bound = 1 / np.sqrt(fan_in)
+            nn.init.uniform_(self.bias, -bound, bound)
+
+    def forward(self, x):
+        # x: (batch, in_features) or (batch, time, in_features)
+        y = x.matmul(self.weight.t())
+        if self.bias is not None:
+            y = y + self.bias
+        return y
+
 class SoCLSTM(nn.Module):
     def __init__(self, input_size=5, hidden_size=94, num_layers=1):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.fc = LinearScratch(hidden_size, 1)
 
     def forward(self, x):
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, dtype=x.dtype, device=x.device)

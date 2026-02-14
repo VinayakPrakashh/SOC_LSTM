@@ -1,0 +1,82 @@
+================================================================================
+ FILE SUMMARY
+================================================================================
+
+INPUT GATE FILES:
+--------------------------------------------------------------------------------
+  ✓ input/W_ih_input_94x5.npy
+  ✓ input/W_ih_input_94x5.txt
+  ✓ input/W_hh_input_94x94.npy
+  ✓ input/W_hh_input_94x94.txt
+  ✓ input/b_ih_input_94.npy
+  ✓ input/b_ih_input_94.txt
+  ✓ input/b_hh_input_94.npy
+  ✓ input/b_hh_input_94.txt
+  ✓ input/b_combined_input_94.npy
+  ✓ input/b_combined_input_94.txt
+  ✓ input/input_gate_94x100.npy
+  ✓ input/input_gate_94x100.txt
+
+FORGET GATE FILES:
+--------------------------------------------------------------------------------
+  ✓ forget/W_ih_forget_94x5.npy
+  ✓ forget/W_ih_forget_94x5.txt
+  ✓ forget/W_hh_forget_94x94.npy
+  ✓ forget/W_hh_forget_94x94.txt
+  ✓ forget/b_ih_forget_94.npy
+  ✓ forget/b_ih_forget_94.txt
+  ✓ forget/b_hh_forget_94.npy
+  ✓ forget/b_hh_forget_94.txt
+  ✓ forget/b_combined_forget_94.npy
+  ✓ forget/b_combined_forget_94.txt
+  ✓ forget/forget_gate_94x100.npy
+  ✓ forget/forget_gate_94x100.txt
+
+CELL GATE FILES:
+--------------------------------------------------------------------------------
+  ✓ cell/W_ih_cell_94x5.npy
+  ✓ cell/W_ih_cell_94x5.txt
+  ✓ cell/W_hh_cell_94x94.npy
+  ✓ cell/W_hh_cell_94x94.txt
+  ✓ cell/b_ih_cell_94.npy
+  ✓ cell/b_ih_cell_94.txt
+  ✓ cell/b_hh_cell_94.npy
+  ✓ cell/b_hh_cell_94.txt
+  ✓ cell/b_combined_cell_94.npy
+  ✓ cell/b_combined_cell_94.txt
+  ✓ cell/cell_gate_94x100.npy
+  ✓ cell/cell_gate_94x100.txt
+
+OUTPUT GATE FILES:
+--------------------------------------------------------------------------------
+  ✓ output/W_ih_output_94x5.npy
+  ✓ output/W_ih_output_94x5.txt
+  ✓ output/W_hh_output_94x94.npy
+  ✓ output/W_hh_output_94x94.txt
+  ✓ output/b_ih_output_94.npy
+  ✓ output/b_ih_output_94.txt
+  ✓ output/b_hh_output_94.npy
+  ✓ output/b_hh_output_94.txt
+  ✓ output/b_combined_output_94.npy
+  ✓ output/b_combined_output_94.txt
+  ✓ output/output_gate_94x100.npy
+  ✓ output/output_gate_94x100.txt
+
+FULL MATRICES:
+--------------------------------------------------------------------------------
+  ✓ full/W_ih_full_376x5.npy
+  ✓ full/W_ih_full_376x5.txt
+  ✓ full/W_hh_full_376x94.npy
+  ✓ full/W_hh_full_376x94.txt
+  ✓ full/b_ih_full_376.npy
+  ✓ full/b_ih_full_376.txt
+  ✓ full/b_hh_full_376.npy
+  ✓ full/b_hh_full_376.txt
+  ✓ full/b_combined_full_376.npy
+  ✓ full/b_combined_full_376.txt
+  ✓ full/W_all_376x100.npy
+  ✓ full/W_all_376x100.txt
+
+================================================================================
+ TOTAL FILES CREATED: 60
+================================================================================
