@@ -7,11 +7,14 @@ module lstm_sequence_controller (
     output reg rd_input,
     input [15:0] weights,     // Weights for the LSTM (packed as needed)
     output reg[6:0] weight_addr,     // Address for weight memory (0-93)
-    output reg [15:0] output_data, // Final output after FC layer
+    output  [15:0] output_data, // Final output after FC layer
     output reg [6:0] addr_counter, // Address counter for input/weight loading
     output reg wr_en,              // Write enable for output data
     output reg done,               // Completion signal
-    output reg busy                // FSM is busy
+    output reg busy,                // FSM is busy
+    output reg load_data, //to load data for systolic array
+    output reg [6:0] load_addr_counter, //counter for loading data into systolic array
+    input  done_multiply //signal from systolic array indicating loading is done
 );
 
 // ============================================================================
@@ -20,11 +23,11 @@ module lstm_sequence_controller (
 
 localparam [3:0] 
     IDLE           = 4'd0,
-    INIT_LOAD     = 4'd1,
-    SEQ_LOAD   = 4'd2,
-    MULTIPLY  = 4'd3,
-    UPDATE_CELL    = 4'd4,
-    UPDATE_HIDDEN  = 4'd5,
+    LOAD_INPUT     = 4'd1,
+    WAIT_FOR_INPUT   = 4'd2,
+    LOAD    = 4'd3,
+    LOAD_TO_SYSTOLIC_ARRAY = 4'd4,
+    WAIT_DONE  = 4'd5,
     NEXT_TIMESTEP  = 4'd6,
     FC_LAYER       = 4'd7,
     OUTPUT_RESULT  = 4'd8,
@@ -33,25 +36,13 @@ localparam [3:0]
 reg [3:0] state, next_state;
 reg [4:0] timestep;  // 5 bits to count up to 20 timesteps
 reg [79:0] current_input; // Register to hold current input data for processing
-
+ // Counter for input loading (0-4 for 5 inputs)
 wire [15:0] input_mux_out; // Output from input multiplexer
 // ============================================================================
 // Timestep Counter
 // ============================================================================
 
 localparam MAX_TIMESTEPS = 20;
-
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        timestep <= 5'd0;
-    end else if (state == IDLE && start) begin
-        timestep <= 5'd0;
-    end else if (state == NEXT_TIMESTEP && timestep < MAX_TIMESTEPS - 1) begin
-        timestep <= timestep + 1'b1;
-    end else if (state == DONE) begin
-        timestep <= 5'd0;
-    end
-end
 
 // ============================================================================
 // State Register
@@ -77,23 +68,30 @@ always @(*) begin
                 next_state = LOAD_INPUT;  // Start loading input data
         end
         LOAD_INPUT: begin
-            next_state = LOAD;
+            next_state = WAIT_FOR_INPUT;  // Wait for input data to be ready
+        end
+        WAIT_FOR_INPUT: begin
+            next_state = LOAD;  // After loading input, move to processing
         end
         LOAD: begin
-            next_state = MULTIPLY;
+            if(addr_counter < 99) begin
+                next_state = LOAD;
+            end // Load all inputs and weights
+            else begin
+                next_state = LOAD_TO_SYSTOLIC_ARRAY; // After loading, perform multiplication
+            end
+        end
+        LOAD_TO_SYSTOLIC_ARRAY: begin
+            if(load_addr_counter < 99) begin
+                next_state = LOAD_TO_SYSTOLIC_ARRAY;
+            end else begin
+                next_state = WAIT_DONE; // After loading, perform multiplication
+            end
+        end
+        WAIT_DONE: begin
+           
         end
         
-        MULTIPLY: begin
-            next_state = UPDATE_CELL;
-        end
-        
-        UPDATE_CELL: begin
-            next_state = UPDATE_HIDDEN;
-        end
-        
-        UPDATE_HIDDEN: begin
-            next_state = NEXT_TIMESTEP;
-        end
         
         NEXT_TIMESTEP: begin
             if (timestep < MAX_TIMESTEPS - 1)
@@ -132,8 +130,9 @@ always @(posedge clk or negedge rst_n) begin
         addr_counter <= 7'd0;
         rd_input <= 1'b0;
         weight_addr <= 7'd0;
-        output_data <= 16'd0;
         wr_en <= 1'b0;
+        load_data <= 1'b0;
+        load_addr_counter <= 0;
     end else begin
         case (state)
             IDLE: begin
@@ -141,38 +140,59 @@ always @(posedge clk or negedge rst_n) begin
                 busy <= 1'b0;
                 timestep <= 5'd0;
                 addr_counter <= 7'd0;
-                output_data <= 16'd0;
+
                 rd_input <= 1'b0;
                 weight_addr <= 7'd0;
                 wr_en <= 1'b0;
+                load_data <= 1'b0;
+                 load_addr_counter <= 0;
+                if(start) begin
+                    busy <= 1'b1;
+                    rd_input <= 1'b1;  // Signal to read input data
+                end
 
             end
             LOAD_INPUT: begin
                 busy <= 1'b1;
                 rd_input <= 1'b1;  // Signal to read input data
-                // Addressing logic for input data can be implemented here
-                current_input <= input_data; // Capture input data for processing
-                
 
+            end
+            WAIT_FOR_INPUT: begin
+                // Wait state to ensure input data is ready
+                rd_input <= 1'b0; // Stop reading input data
+                current_input <= input_data; // Capture input data for processing
+                wr_en <= 1'b1; 
             end
             LOAD: begin
                 busy <= 1'b1;
-                wr_en <= 1'b1;  
+                 
+                rd_input <= 1'b0; // Stop reading input data
 
-                // Load initial input data for timestep 0
-                addr_counter <= addr_counter + 1;
-                if(addr_counter < 5) begin
-                    output_data <= input_mux_out; // Capture input data for processing
-                end else if((addr_counter > 4) && (addr_counter < 99)) begin
+                // Load initial input data for timestep 0the
+                
+                 if((addr_counter > 4) && (addr_counter < 99)) begin
                     weight_addr <= weight_addr + 1; // Increment weight address for loading
-                    output_data <= (timestep == 0)? 0:weights; // Capture weight data for processing
+                 end
+                    addr_counter <= addr_counter + 1; // Increment address counter
+
+                if(addr_counter == 99) begin
+                    wr_en <= 1'b0; // Stop writing after loading all data
+                    addr_counter <= 7'd0; // Reset address counter for next phase
+                    load_data <= 1'b1; // Signal to load data into systolic array
+                    weight_addr <= 7'd0; // Reset weight address for next phase
                 end
-                else if(addr_counter == 99) begin
-                    output_data <= 1; // Capture last weight data for processing
+            end
+            LOAD_TO_SYSTOLIC_ARRAY: begin
+
+                load_addr_counter <= load_addr_counter + 1; // Increment load address counter
+                if(load_addr_counter == 99) begin
+                    load_data <= 1'b0; // Stop loading after all data is loaded
+                    load_addr_counter <= 0; // Reset load address counter
                 end
+            end
+            WAIT_DONE: begin
                 
             end
-            
             OUTPUT_RESULT: begin
                 // Final output calculated here
                 done <= 1'b0;
@@ -191,56 +211,17 @@ always @(posedge clk or negedge rst_n) begin
     end
 end
 
-// ============================================================================
-// Hidden State and Cell State Storage (94 units each)
-// ============================================================================
-
-reg [15:0] h_state [0:93];  // Hidden state (94 units)
-reg [15:0] c_state [0:93];  // Cell state (94 units)
-
-integer i;
-
-// Initialize states to zero at start
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        for (i = 0; i < 94; i = i + 1) begin
-            h_state[i] <= 16'd0;
-            c_state[i] <= 16'd0;
-        end
-    end else if (state == IDLE && start) begin
-        // Reset states for new sequence
-        for (i = 0; i < 94; i = i + 1) begin
-            h_state[i] <= 16'd0;
-            c_state[i] <= 16'd0;
-        end
-    end
-end
-
-// ============================================================================
-// Cycle Counter (for debugging/monitoring)
-// ============================================================================
-
-reg [15:0] cycle_count;
-
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        cycle_count <= 16'd0;
-    end else if (state == IDLE) begin
-        cycle_count <= 16'd0;
-    end else if (busy) begin
-        cycle_count <= cycle_count + 1'b1;
-    end
-end
 mux_5to1 #(
-    .WIDTH(16)
+    .DATA_WIDTH(16)
 ) input_mux (
-    .in0(current_input[15:0]),   // Input 0
-    .in1(current_input[31:16]),  // Input 1
-    .in2(current_input[47:32]),  // Input 2
-    .in3(current_input[63:48]),  // Input 3
-    .in4(current_input[79:64]),  // Input 4
-    .sel(addr_counter[2:0]),     // Select based on address counter (modulo 5)
-    .out(input_mux_out)               // Output to weight multiplier
+    .data_in0(current_input[15:0]),
+    .data_in1(current_input[31:16]),
+    .data_in2(current_input[47:32]),
+    .data_in3(current_input[63:48]),
+    .data_in4(current_input[79:64]),
+    .sel(addr_counter[2:0]), // Use lower 3 bits of addr_counter to select input
+    .data_out(input_mux_out)
 );
 
+assign  output_data= (addr_counter < 5) ? input_mux_out : ((addr_counter > 4) && (addr_counter < 99))? weights:1; // Output either input data or weights based on addr_counter
 endmodule
