@@ -2,7 +2,7 @@
 // S7.8 Format: 1 sign bit + 7 integer bits + 8 fractional bits
 // Sign bit = MSB (bit 15), if 1 = negative, if 0 = positive
 
-module tanh_approx (
+module tanh (
     input [15:0] x,
     output reg [15:0] y
 );

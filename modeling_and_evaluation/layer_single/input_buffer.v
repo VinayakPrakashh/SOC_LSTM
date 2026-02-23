@@ -22,7 +22,7 @@ module input_buffer #(
     
     // Initialize memory to zero
     initial begin
-    mem[0] <= 80'h11223344556677889900;
+    mem[0] <= 80'h80A2006301A80065801E;
     end
     
     // Write operation (synchronous)

@@ -73,6 +73,17 @@ class SoCLSTM(nn.Module):
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, dtype=x.dtype, device=x.device)
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, dtype=x.dtype, device=x.device)
         out, _ = self.lstm(x, (h0, c0))
+    
+    # Print first timestep hidden state (after processing timestep 0)
+        first_timestep_ht = out[:, 0, :]  # shape: (batch_size, hidden_size)
+        print("\n" + "="*70)
+        print("FIRST TIMESTEP HIDDEN STATE (h_t after timestep 0)")
+        print("="*70)
+        print(f"Shape: {first_timestep_ht.shape}")
+        print(f"First sample h_t:\n{first_timestep_ht[0]}")
+        print(f"Statistics - Mean: {first_timestep_ht[0].mean():.6f}, Std: {first_timestep_ht[0].std():.6f}")
+        print("="*70 + "\n")
+    
         out = self.fc(out[:, -1, :])
         return out
 

@@ -1,4 +1,4 @@
-module sigmoid_s7_8 #(
+module sigmoid #(
     parameter WIDTH = 16,           // 16-bit S7.8 format
     parameter FRAC_BITS = 8,        // 8 fractional bits
     parameter ADDR_WIDTH = 11       // Address width for the LUT
@@ -46,7 +46,7 @@ module sigmoid_s7_8 #(
     );
 
     // Subtractor for symmetry calculation: 1 - sigmoid(|x|)
-    sub_fixed #(
+    subtractor #(
         .WIDTH(WIDTH),
         .FRAC_BITS(FRAC_BITS)
     ) sub_inst (

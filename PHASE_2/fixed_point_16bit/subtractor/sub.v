@@ -1,4 +1,4 @@
-module sub_fixed #(
+module subtractor #(
     parameter WIDTH = 16,        // Total bits: 1 sign + 7 integer + 8 fraction
     parameter FRAC_BITS = 8,     // Number of fractional bits
     parameter INT_BITS  = 7      // Number of integer bits

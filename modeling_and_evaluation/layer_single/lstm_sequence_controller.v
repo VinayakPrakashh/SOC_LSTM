@@ -14,7 +14,9 @@ module lstm_sequence_controller (
     output reg busy,                // FSM is busy
     output reg load_data, //to load data for systolic array
     output reg [6:0] load_addr_counter, //counter for loading data into systolic array
-    input  done_multiply //signal from systolic array indicating loading is done
+    input  done_multiply, //signal from systolic array indicating loading is done
+    output reg [6:0] ht_counter, //counter for hidden state updates
+    output reg inter_rst //reset signal for intermediate registers in systolic array
 );
 
 // ============================================================================
@@ -28,9 +30,9 @@ localparam [3:0]
     LOAD    = 4'd3,
     LOAD_TO_SYSTOLIC_ARRAY = 4'd4,
     WAIT_DONE  = 4'd5,
-    NEXT_TIMESTEP  = 4'd6,
-    FC_LAYER       = 4'd7,
-    OUTPUT_RESULT  = 4'd8,
+    UPDATE_HT  = 4'd6,
+    NEXT_TIMESTEP  = 4'd7,
+    FC_LAYER      = 4'd8,
     DONE           = 4'd9;
 
 reg [3:0] state, next_state;
@@ -38,7 +40,8 @@ reg [4:0] timestep;  // 5 bits to count up to 20 timesteps
 reg [79:0] current_input; // Register to hold current input data for processing
  // Counter for input loading (0-4 for 5 inputs)
 wire [15:0] input_mux_out; // Output from input multiplexer
-// ============================================================================
+wire [15:0] weights_fin;
+ // ============================================================================
 // Timestep Counter
 // ============================================================================
 
@@ -89,24 +92,36 @@ always @(*) begin
             end
         end
         WAIT_DONE: begin
-           
+           if(done_multiply) begin
+            next_state <= UPDATE_HT;
+           end
+           else begin
+            next_state <= WAIT_DONE;
+           end
+
         end
         
-        
+        UPDATE_HT: begin
+            if(done_multiply) begin
+                next_state = UPDATE_HT; // Wait for multiplication to complete
+            end else begin
+                next_state = NEXT_TIMESTEP; // Move to next timestep or FC layer
+            end
+        end
         NEXT_TIMESTEP: begin
             if (timestep < MAX_TIMESTEPS - 1)
                 next_state = LOAD_INPUT;  // Go to next timestep
-            else
-                next_state = FC_LAYER;     // All timesteps done
+        else
+                next_state = FC_LAYER; // After last timestep, output result
+
         end
         
         FC_LAYER: begin
-            next_state = OUTPUT_RESULT;
         end
-        
-        OUTPUT_RESULT: begin
-            next_state = DONE;
-        end
+            
+//        OUTPUT_RESULT: begin
+//            next_state = DONE;
+//        end
         
         DONE: begin
             next_state = IDLE;
@@ -133,6 +148,9 @@ always @(posedge clk or negedge rst_n) begin
         wr_en <= 1'b0;
         load_data <= 1'b0;
         load_addr_counter <= 0;
+        ht_counter <= 0;
+        inter_rst <= 1'b0;
+
     end else begin
         case (state)
             IDLE: begin
@@ -146,6 +164,8 @@ always @(posedge clk or negedge rst_n) begin
                 wr_en <= 1'b0;
                 load_data <= 1'b0;
                  load_addr_counter <= 0;
+                    ht_counter <= 0;
+                    inter_rst <= 1'b0;
                 if(start) begin
                     busy <= 1'b1;
                     rd_input <= 1'b1;  // Signal to read input data
@@ -155,6 +175,9 @@ always @(posedge clk or negedge rst_n) begin
             LOAD_INPUT: begin
                 busy <= 1'b1;
                 rd_input <= 1'b1;  // Signal to read input data
+                inter_rst <= 1'b0; // Ensure intermediate registers are not reset during input loading
+                
+                
 
             end
             WAIT_FOR_INPUT: begin
@@ -170,7 +193,8 @@ always @(posedge clk or negedge rst_n) begin
 
                 // Load initial input data for timestep 0the
                 
-                 if((addr_counter > 4) && (addr_counter < 99)) begin
+                 if((addr_counter > 3) && (addr_counter < 99)) begin
+
                     weight_addr <= weight_addr + 1; // Increment weight address for loading
                  end
                     addr_counter <= addr_counter + 1; // Increment address counter
@@ -193,10 +217,34 @@ always @(posedge clk or negedge rst_n) begin
             WAIT_DONE: begin
                 
             end
-            OUTPUT_RESULT: begin
-                // Final output calculated here
-                done <= 1'b0;
+                UPDATE_HT: begin
+                    ht_counter <= ht_counter + 1; // Increment hidden state counter
+                    if(!done_multiply) begin
+                        ht_counter <= 0; // Reset hidden state counter after update
+                    end
+                end
+            NEXT_TIMESTEP: begin
+                if (timestep < MAX_TIMESTEPS - 1) begin
+                    timestep <= timestep + 1; // Move to next timestep
+                    addr_counter <= 0; // Reset address counter for next input loading
+                    weight_addr <= 0; // Reset weight address for next loading
+                    inter_rst <= 1'b1; // Reset intermediate registers for next timestep
+                end else begin
+                    timestep <= 0; // Reset timestep counter after last timestep
+                     inter_rst <= 1'b0; // Deassert reset for intermediate registers
+                     wr_en <= 1'b0; // Ensure write enable is low before FC layer
+                     load_data <= 1'b0; // Ensure load data is low before FC layer
+                     load_addr_counter <= 0; // Reset load address counter
+                     ht_counter <= 0; // Reset hidden state counter
+                     weight_addr <= 0; // Reset weight address for FC layer
+                     addr_counter <= 0; // Reset address counter for FC layer
+                    // After last timestep, prepare for FC layer or output result
+                end
             end
+//            OUTPUT_RESULT: begin
+//                // Final output calculated here
+//                done <= 1'b0;
+//            end
             
             DONE: begin
                 done <= 1'b1;
@@ -222,6 +270,6 @@ mux_5to1 #(
     .sel(addr_counter[2:0]), // Use lower 3 bits of addr_counter to select input
     .data_out(input_mux_out)
 );
-
-assign  output_data= (addr_counter < 5) ? input_mux_out : ((addr_counter > 4) && (addr_counter < 99))? weights:1; // Output either input data or weights based on addr_counter
+assign weights_fin = (timestep == 0) ? 0 : weights;
+assign  output_data= (addr_counter < 5) ? input_mux_out : ((addr_counter > 4) && (addr_counter < 99))? weights_fin:16'b0000_0001_0000_0000; // Output either input data or weights based on addr_counter
 endmodule

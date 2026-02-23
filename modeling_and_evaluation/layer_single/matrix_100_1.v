@@ -14,7 +14,7 @@ module memory_100x16 #(
     // Read port
     input rd_en,                                    // Read enable
     input [ADDR_WIDTH-1:0] rd_addr,                // Read address (0-99)
-    output reg [DATA_WIDTH-1:0] rd_data            // Data read out (16 bits)
+    output  [DATA_WIDTH-1:0] rd_data            // Data read out (16 bits)
 );
 
     // Memory array: 100 locations × 16 bits each
@@ -39,16 +39,9 @@ module memory_100x16 #(
         end
     end
     
-    // Read operation (synchronous)
-    always @(posedge clk) begin
-        if (!rst) begin
-            rd_data <= 16'h0;
-        end else begin
-            if (rd_en) begin
-                rd_data <= mem[rd_addr];
-            end
-        end
-    end
+
+assign  rd_data = mem[rd_addr];
+
     
     
 endmodule

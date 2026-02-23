@@ -9,13 +9,36 @@ from sklearn.preprocessing import StandardScaler
 FEATURE_COLS = ['Voltage [V]', 'Current [A]', 'Temperature [degC]', 'Power [W]', 'CC_Capacity [Ah]']
 DEFAULT_TEMPS = ['25degC', '0degC', 'n10degC', 'n20degC', '10degC', '40degC']
 
+# Fixed scaled features (20 timesteps x 5 features)
+FIXED_SCALED_FEATURES = np.array([
+    [-0.116864,  0.396518,  1.655884,  0.388196, -0.634126],
+    [-0.116864,  0.396518,  1.655884,  0.388196, -0.634162],
+    [-0.116864,  0.396518,  1.655884,  0.388196, -0.634205],
+    [-0.116864,  0.395391,  1.655884,  0.387022, -0.634241],
+    [-0.116864,  0.396518,  1.655884,  0.388196, -0.634285],
+    [-0.116864,  0.396518,  1.655884,  0.388196, -0.634320],
+    [-0.116864,  0.395391,  1.655884,  0.387022, -0.634364],
+    [-0.116864,  0.395391,  1.655884,  0.387022, -0.634400],
+    [-0.125400,  0.329053,  1.655884,  0.318008, -0.634505],
+    [-0.151009,  0.136782,  1.655884,  0.118548, -0.634735],
+    [-0.202765, -0.244382,  1.655884, -0.274353, -0.635308],
+    [-0.215249, -0.300603,  1.655884, -0.331718, -0.635928],
+    [-0.240857, -0.454644,  1.655884, -0.488938, -0.636749],
+    [-0.223212, -0.278117,  1.655884, -0.307998, -0.637349],
+    [-0.224359, -0.264623,  1.655884, -0.293996, -0.637938],
+    [-0.296022, -0.802078,  1.655884, -0.841367, -0.638873],
+    [-0.320483, -0.916766,  1.650127, -0.956274, -0.640115],
+    [-0.287486, -0.607558,  1.650127, -0.642464, -0.640991],
+    [-0.282357, -0.545719,  1.650127, -0.579374, -0.641815],
+    [-0.284078, -0.531103,  1.650127, -0.564214, -0.642628]
+])
+
 
 class LinearScratch(nn.Module):
     def __init__(self, in_features, out_features, bias=True):
         super().__init__()
         self.weight = nn.Parameter(torch.empty(out_features, in_features))
         self.bias = nn.Parameter(torch.empty(out_features)) if bias else None
-        # simple init (like Kaiming uniform)
         nn.init.kaiming_uniform_(self.weight, a=np.sqrt(5))
         if self.bias is not None:
             fan_in = in_features
@@ -23,11 +46,11 @@ class LinearScratch(nn.Module):
             nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x):
-        # x: (batch, in_features) or (batch, time, in_features)
         y = x.matmul(self.weight.t())
         if self.bias is not None:
             y = y + self.bias
         return y
+
 
 class SoCLSTM(nn.Module):
     def __init__(self, input_size=5, hidden_size=94, num_layers=1):
@@ -84,6 +107,53 @@ class SoCLSTM(nn.Module):
         h_prev = h0.squeeze(0)     # (batch, hidden)
         c_prev = c0.squeeze(0)     # (batch, hidden)
         
+        # ====================================================================
+        # DETAILED TILE COMPUTATION (First 25 tiles for rows 0-3)
+        # ====================================================================
+        print("\n" + "="*100)
+        print("DETAILED TILE-BY-TILE COMPUTATION FOR TIMESTEP 0 (First 25 tiles, Rows 0-3)")
+        print("="*100)
+        print("\nInput x_t (5 features):", x_t[0].tolist())
+        print("\n" + "-"*100)
+        
+        # For each of the 4 gates
+        gate_names = ['Input Gate (i)', 'Forget Gate (f)', 'Cell Gate (g)', 'Output Gate (o)']
+        W_gates = [W_ii, W_if, W_ig, W_io]
+        b_i_gates = [b_ii, b_if, b_ig, b_io]
+        b_h_gates = [b_hi, b_hf, b_hg, b_ho]
+        
+        for gate_idx, (gate_name, W_i, b_i, b_h) in enumerate(zip(gate_names, W_gates, b_i_gates, b_h_gates)):
+            print(f"\n{'='*100}")
+            print(f"GATE {gate_idx}: {gate_name}")
+            print(f"{'='*100}")
+            
+            # Compute input contribution: x_t @ W_i.t()
+            input_contrib = x_t @ W_i.t()  # (batch, hidden)
+            
+            # Compute hidden contribution: h_prev @ W_h.t() (all zeros for timestep 0)
+            # hidden_contrib = h_prev @ W_h.t()  # Not needed for timestep 0
+            
+            # Show first 25 tiles (neurons 0-24) for rows 0-3
+            print(f"\nShowing computation for neurons 0-24:")
+            print(f"{'Neuron':>6} | {'W[0]':>12} | {'W[1]':>12} | {'W[2]':>12} | {'W[3]':>12} | {'W[4]':>12} | {'x*W':>12} | {'b_ih':>12} | {'b_hh':>12} | {'Total':>12}")
+            print("-"*150)
+            
+            for neuron in range(min(25, hidden)):
+                # Get weights for this neuron
+                w = W_i[neuron, :]  # (5,)
+                
+                # Compute weighted sum
+                weighted_sum = (x_t[0] * w).sum().item()
+                
+                # Add biases
+                bias_ih = b_i[neuron].item()
+                bias_hh = b_h[neuron].item()
+                total = weighted_sum + bias_ih + bias_hh
+                
+                print(f"{neuron:6d} | {w[0].item():12.6f} | {w[1].item():12.6f} | {w[2].item():12.6f} | {w[3].item():12.6f} | {w[4].item():12.6f} | {weighted_sum:12.6f} | {bias_ih:12.6f} | {bias_hh:12.6f} | {total:12.6f}")
+        
+        print("\n" + "="*100)
+        
         # Compute gates
         i_t = torch.sigmoid(x_t @ W_ii.t() + b_ii + h_prev @ W_hi.t() + b_hi)
         f_t = torch.sigmoid(x_t @ W_if.t() + b_if + h_prev @ W_hf.t() + b_hf)
@@ -94,8 +164,35 @@ class SoCLSTM(nn.Module):
         c_t = f_t * c_prev + i_t * g_t
         h_t = o_t * torch.tanh(c_t)
         
+        print("\n" + "="*100)
+        print("GATE ACTIVATIONS AFTER TIMESTEP 0 (After sigmoid/tanh)")
+        print("="*100)
+        print(f"\nShowing first 25 neurons (0-24):")
+        print(f"{'Neuron':>6} | {'i_t':>12} | {'f_t':>12} | {'g_t':>12} | {'o_t':>12}")
+        print("-"*70)
+        for neuron in range(min(25, hidden)):
+            print(f"{neuron:6d} | {i_t[0, neuron].item():12.6f} | {f_t[0, neuron].item():12.6f} | {g_t[0, neuron].item():12.6f} | {o_t[0, neuron].item():12.6f}")
+        print("="*100 + "\n")
+        
+        print("\n" + "="*100)
+        print("CELL STATE (c_t) and HIDDEN STATE (h_t) COMPUTATION")
+        print("="*100)
+        print(f"\nFormula: c_t = f_t * c_prev + i_t * g_t")
+        print(f"Formula: h_t = o_t * tanh(c_t)")
+        print(f"\nNote: c_prev and h_prev are all zeros for timestep 0")
+        print(f"\nShowing first 25 neurons (0-24):")
+        print(f"{'Neuron':>6} | {'i_t*g_t':>12} | {'c_t':>12} | {'tanh(c_t)':>12} | {'h_t':>12}")
+        print("-"*70)
+        for neuron in range(min(25, hidden)):
+            i_g = (i_t[0, neuron] * g_t[0, neuron]).item()
+            c_val = c_t[0, neuron].item()
+            tanh_c = torch.tanh(c_t[0, neuron]).item()
+            h_val = h_t[0, neuron].item()
+            print(f"{neuron:6d} | {i_g:12.6f} | {c_val:12.6f} | {tanh_c:12.6f} | {h_val:12.6f}")
+        print("="*100 + "\n")
+        
         print("\n" + "="*70)
-        print("GATE ACTIVATIONS AFTER TIMESTEP 0")
+        print("FINAL GATE ACTIVATIONS SUMMARY")
         print("="*70)
         print(f"Input gate (i_t) - first 10 values: {i_t[0, :10].tolist()}")
         print(f"Forget gate (f_t) - first 10 values: {f_t[0, :10].tolist()}")
@@ -118,69 +215,8 @@ class SoCLSTM(nn.Module):
         return out
 
 
-def load_all_data(data_dir, temperatures):
-    """Load all data for scaler fitting"""
-    frames = []
-    for temp_folder in os.listdir(data_dir):
-        if temp_folder in temperatures:
-            temp_path = os.path.join(data_dir, temp_folder)
-            if not os.path.isdir(temp_path):
-                continue
-            for file in os.listdir(temp_path):
-                if 'Charge' in file or 'Dis' in file:
-                    continue
-                if file.endswith('.csv'):
-                    df = pd.read_csv(os.path.join(temp_path, file))
-                    df['Power [W]'] = df['Voltage [V]'] * df['Current [A]']
-                    df['CC_Capacity [Ah]'] = (
-                        df['Current [A]'] * df['Time [s]'].diff().fillna(0) / 3600
-                    ).cumsum()
-                    frames.append(df)
-    return pd.concat(frames, ignore_index=True)
-
-
-def get_random_sample(data_dir, temperatures):
-    """Get random 20 consecutive timesteps from a random file"""
-    # Get all files
-    all_files = []
-    for temp_folder in os.listdir(data_dir):
-        if temp_folder in temperatures:
-            temp_path = os.path.join(data_dir, temp_folder)
-            if not os.path.isdir(temp_path):
-                continue
-            for file in os.listdir(temp_path):
-                if 'Charge' in file or 'Dis' in file:
-                    continue
-                if file.endswith('.csv'):
-                    all_files.append(os.path.join(temp_path, file))
-    
-    # Pick random file
-    random_file = np.random.choice(all_files)
-    print(f"Selected file: {random_file}")
-    
-    # Load file
-    df = pd.read_csv(random_file)
-    df['Power [W]'] = df['Voltage [V]'] * df['Current [A]']
-    df['CC_Capacity [Ah]'] = (
-        df['Current [A]'] * df['Time [s]'].diff().fillna(0) / 3600
-    ).cumsum()
-    
-    # Get random starting point
-    max_start = len(df) - 20
-    if max_start < 0:
-        raise ValueError("File has less than 20 rows")
-    
-    start_idx = np.random.randint(0, max_start)
-    sample = df.iloc[start_idx:start_idx+20]
-    
-    print(f"Random sample: rows {start_idx} to {start_idx+19}")
-    print(f"Time range: {sample['Time [s]'].iloc[0]:.1f}s to {sample['Time [s]'].iloc[-1]:.1f}s")
-    
-    return sample
-
-
-def predict_soc(sample_df, model_path="soc_lstm_model_1layer.pth", data_dir="LG_HG2_processed"):
-    """Predict SOC from 20 timesteps"""
+def predict_soc_fixed(model_path="soc_lstm_model_1layer.pth"):
+    """Predict SOC using fixed 20 timesteps"""
     
     # Load model
     print("\nLoading model...")
@@ -190,28 +226,8 @@ def predict_soc(sample_df, model_path="soc_lstm_model_1layer.pth", data_dir="LG_
     model.eval()
     print("✓ Model loaded")
     
-    # Fit scaler on all training data
-    print("\nFitting scaler...")
-    all_data = load_all_data(data_dir, DEFAULT_TEMPS)
-    scaler = StandardScaler()
-    scaler.fit(all_data[FEATURE_COLS].values)
-    print("✓ Scaler fitted")
-    
-    # Extract features
-    features = sample_df[FEATURE_COLS].values
-    
-    # Print all 20 timesteps
-    print("\n" + "="*90)
-    print("ALL 20 TIMESTEPS - RAW FEATURES")
-    print("="*90)
-    print(f"{'Step':>4} | {'Voltage':>8} | {'Current':>8} | {'Temp':>8} | {'Power':>8} | {'Capacity':>10}")
-    print("-"*90)
-    for i in range(20):
-        print(f"{i+1:4d} | {features[i,0]:8.5f} | {features[i,1]:8.5f} | {features[i,2]:8.4f} | {features[i,3]:8.5f} | {features[i,4]:10.7f}")
-    print("="*90)
-    
-    # Scale features
-    features_scaled = scaler.transform(features)
+    # Use fixed scaled features
+    features_scaled = FIXED_SCALED_FEATURES.copy()
     
     # Print scaled features
     print("\n" + "="*90)
@@ -234,37 +250,21 @@ def predict_soc(sample_df, model_path="soc_lstm_model_1layer.pth", data_dir="LG_
     
     predicted_soc = output.item()
     
-    # Get actual SOC if available
-    actual_soc = sample_df['SOC [-]'].iloc[-1] if 'SOC [-]' in sample_df.columns else None
-    
     print("\n" + "="*70)
     print("PREDICTION RESULT")
     print("="*70)
     print(f"Predicted SOC: {predicted_soc:.6f} ({predicted_soc*100:.4f}%)")
-    
-    if actual_soc is not None:
-        error = abs(predicted_soc - actual_soc)
-        print(f"Actual SOC:    {actual_soc:.6f} ({actual_soc*100:.4f}%)")
-        print(f"Error:         {error:.6f} ({error*100:.4f}%)")
-        print(f"Relative Error: {(error/actual_soc)*100:.2f}%")
-    
     print("="*70)
     
-    return predicted_soc, actual_soc
+    return predicted_soc
 
 
 if __name__ == "__main__":
-    data_dir = "LG_HG2_processed"
-    
     print("="*70)
-    print("RANDOM SOC PREDICTION WITH FULL FEATURE VALUES")
+    print("SOC PREDICTION WITH DETAILED TILE COMPUTATION")
     print("="*70)
-    print("\nGetting random 20 timesteps from dataset...")
     
-    # Get random sample
-    sample = get_random_sample(data_dir, DEFAULT_TEMPS)
-    
-    # Predict
-    predicted_soc, actual_soc = predict_soc(sample)
+    # Predict using fixed data
+    predicted_soc = predict_soc_fixed()
     
     print("\n✓ Prediction complete!")
