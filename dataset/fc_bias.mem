@@ -1,0 +1,4 @@
+// FC Layer Bias (1 value)
+// Format: 16-bit fixed point (1 sign + 7 int + 8 frac)
+// Binary Value | Decimal Value
+0000000000011101  // 0x001d =   0.11522452

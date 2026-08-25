@@ -6,7 +6,7 @@ module lstm_sequence_controller (
     input  [79:0] input_data,  // 5 inputs x 16 bits = 80 bits'
     output reg rd_input,
     input [15:0] weights,     // Weights for the LSTM (packed as needed)
-    output reg[6:0] weight_addr,     // Address for weight memory (0-93)
+    output reg [6:0] weight_addr,     // Address for weight memory (0-93)
     output  [15:0] output_data, // Final output after FC layer
     output reg [6:0] addr_counter, // Address counter for input/weight loading
     output reg wr_en,              // Write enable for output data
@@ -16,7 +16,10 @@ module lstm_sequence_controller (
     output reg [6:0] load_addr_counter, //counter for loading data into systolic array
     input  done_multiply, //signal from systolic array indicating loading is done
     output reg [6:0] ht_counter, //counter for hidden state updates
-    output reg inter_rst //reset signal for intermediate registers in systolic array
+    output reg inter_rst, //reset signal for intermediate registers in systolic array,
+    output reg start_fc_layer, //signal to start FC layer processing
+    input fc_done ,//signal from FC layer indicating completion
+    output reg sel_fc //select signal for mux to choose between weight_addr and addr_fc
 );
 
 // ============================================================================
@@ -93,10 +96,10 @@ always @(*) begin
         end
         WAIT_DONE: begin
            if(done_multiply) begin
-            next_state <= UPDATE_HT;
+            next_state = UPDATE_HT;
            end
            else begin
-            next_state <= WAIT_DONE;
+            next_state = WAIT_DONE;
            end
 
         end
@@ -117,6 +120,11 @@ always @(*) begin
         end
         
         FC_LAYER: begin
+            if(fc_done) begin
+                next_state = DONE; // After FC layer is done, signal completion
+            end else begin
+                next_state = FC_LAYER; // Wait for FC layer to complete
+            end
         end
             
 //        OUTPUT_RESULT: begin
@@ -151,6 +159,9 @@ always @(posedge clk or negedge rst_n) begin
         ht_counter <= 0;
         inter_rst <= 1'b0;
 
+        sel_fc <= 0;
+        start_fc_layer <= 0;
+
     end else begin
         case (state)
             IDLE: begin
@@ -166,6 +177,9 @@ always @(posedge clk or negedge rst_n) begin
                  load_addr_counter <= 0;
                     ht_counter <= 0;
                     inter_rst <= 1'b0;
+
+                    sel_fc <= 0;
+                    start_fc_layer <= 0;
                 if(start) begin
                     busy <= 1'b1;
                     rd_input <= 1'b1;  // Signal to read input data
@@ -240,6 +254,17 @@ always @(posedge clk or negedge rst_n) begin
                      addr_counter <= 0; // Reset address counter for FC layer
                     // After last timestep, prepare for FC layer or output result
                 end
+            end
+            FC_LAYER: begin
+                // FC layer processing would be triggered here
+                // For simplicity, we can assume it starts immediately after last timestep
+                // and sets done when complete. The actual FC layer logic would be separate.
+                start_fc_layer <= 1'b1; // Signal to start FC layer processing
+                busy <= 1'b1;
+                inter_rst <= 1'b0; // Ensure intermediate registers are not reset during input loading
+                sel_fc <= 1'b1; // Select FC layer address for weight access
+    
+
             end
 //            OUTPUT_RESULT: begin
 //                // Final output calculated here

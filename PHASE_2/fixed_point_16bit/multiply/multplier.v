@@ -1,4 +1,4 @@
-module mul_fixed #(
+module multiplier #(
     parameter WIDTH      = 16, // Total bits (1 sign + integer + fraction)
     parameter FRAC_BITS  = 8,  // Number of fractional bits
     parameter INT_BITS   = 7   // Number of integer bits
